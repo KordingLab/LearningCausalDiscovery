@@ -1,0 +1,2 @@
+python run/scripts/csv_generation_v2.py --train_down_sample_ratio=0.01 --test_down_sample_ratio=0.01
+python run/scripts/csv_generation_v2.py --train_down_sample_ratio=0.01 --test_down_sample_ratio=0.01

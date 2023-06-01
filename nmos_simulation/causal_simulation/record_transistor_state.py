@@ -3,55 +3,49 @@ from sim2600 import sim2600Console
 from sim2600 import params, sim6502, simTIA
 
 
-def transistor_record_hr(lesion=None, halfclk=-1, rom=params.ROMS_DONKEY_KONG, iteration=1000, tidx=-1):
+def record_regular_transistor_state(rom=params.ROMS_DONKEY_KONG, num_iterations=1000):
     """
-    Record the transistor state for a given rom and iteration in higher temporal resolution (within the half-clock)
+    Record the transistor state for a regular simulation
     """
-    if lesion is None:
-        # Regular simulation and not lesioning
-        tidx = -1
-        s1 = lambda x: sim2600Console.Sim2600Console(x, simTIAfactory=simTIA.MySimTIA,
-                                                     sim6502factory=sim6502.MySim6502,
-                                                     tidx_lesion=tidx,)
-    else:
-        # Simulation with lesioning a transistor
-        s1 = lambda x: sim2600Console.Sim2600Console(x, simTIAfactory=simTIA.MySimTIA,
-                                                     sim6502factory=sim6502.MySim6502,
-                                                     lesion=lesion,
-                                                     tidx_lesion=tidx,)
+    sim = sim2600Console.Sim2600Console(rom, simTIAfactory=simTIA.MySimTIA,
+                                        sim6502factory=sim6502.MySim6502)
+    transistor_history = []
 
-    s1 = s1(rom)
-    t1_state = []
-    halfclk = [halfclk] if halfclk != -1 else range(iteration)
-    s1.sim6507.resetFullTransistorState()
+    sim.sim6507.setRecording(True)
+    for step in range(num_iterations):
+        # Run the simulation for one iteration
+        sim.advanceOneHalfClock()
 
-    # np.testing.assert_array_equal(t1_init_state, t2_init_state)
-    print("-" * 50)
-    for i in range(iteration):
-        # turn on the full resolution recording for nmos6502 at specific clock cycle
-        if i in halfclk:
-            s1.sim6507.setRecording(True)
-        else:
-            s1.sim6507.setRecording(False)
+        transistor_history.append(sim.sim6507.getFullTransistorState())
 
-        # half-clock step the 6502
-        s1.advanceOneHalfClock()
-
-        #  record the transistor state
-        if i in halfclk:
-            t1_state.append(s1.sim6507.getFullTransistorState())
-
-    # return transistor state
-    t1_state = t1_state[0] if len(t1_state) == 1 else np.concatenate(t1_state, axis=1)
-    return t1_state
+    transistor_history = transistor_history[0] if len(transistor_history) == 1 else np.concatenate(transistor_history, axis=1)
+    return transistor_history
 
 
-def original_measure_hr(rom=params.ROMS_DONKEY_KONG, iteration=1000):
-    t_org = transistor_record_hr(rom=rom, iteration=iteration)
-    return t_org
+def single_transistor_perturbation(tidx=None, perturb_step=None, perturb_type=None, rom=params.ROMS_DONKEY_KONG, num_iterations=1000):
+    """
+    Perturb a single transistor and record the transistor states
+    """
+    assert tidx is not None and perturb_step is not None and perturb_type is not None, \
+        "tidx and perturb_step and perturb_type must be specified"
+    assert perturb_step < num_iterations, "perturb_step must be smaller than num_iterations"
 
+    sim = sim2600Console.Sim2600Console(rom, simTIAfactory=simTIA.MySimTIA,
+                                        sim6502factory=sim6502.MySim6502)
 
-def single_leision_measure_v2(tidx=-1, halfclk=-1, lesion="High", rom=params.ROMS_DONKEY_KONG, iteration=1000):
-    # data0 = -1 * np.ones((3510, 50000), dtype=np.int8)
-    t_org = transistor_record_hr(lesion, halfclk, rom, iteration=iteration, tidx=tidx)
-    return t_org
+    # perturbation happens between perturb_step - 1 and perturb_step
+    for step in range(num_iterations):
+        # Run the simulation for one iteration
+        sim.advanceOneHalfClock()
+
+        # Record the transistor states, only consider the next half-clock
+        if step == perturb_step:
+            state = sim.sim6507.getFullTransistorState()
+            break
+
+        # Perturb on a transistor if needed
+        if step == perturb_step - 1:
+            sim.sim6507.intervenTransistor(tidx, perturb_type)
+            sim.sim6507.setRecording(True)
+
+    return state

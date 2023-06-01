@@ -1,3 +1,6 @@
+from torch.utils.data import DataLoader, Dataset
+
+
 def cycle(iterable):
     # cycle through an iterable
     iterator = iter(iterable)
@@ -7,22 +10,17 @@ def cycle(iterable):
         except StopIteration:
             iterator = iter(iterable)
 
-class MaxCycleLoader:
-    """
-    Cycles through loaders until the loader with largest size
-    """
-    def __init__(self, loaders):
-        self.loaders = loaders
-        self.max_batches = max([len(loader) for loader in self.loaders.values()])
 
-    def __iter__(self):
-        cycles = [cycle(loader) for loader in self.loaders.values()]
-        for k, loader, _ in zip(
-            cycle(self.loaders.keys()),
-            (cycle(cycles)),
-            range(len(self.loaders) * self.max_batches),
-        ):
-            yield next(loader)
+class CombinedCycleDataset(Dataset):
+    def __init__(self, datasets):
+        self.datasets = datasets
+        self.max_len = max([len(dataset) for dataset in datasets])
+
+    def __getitem__(self, index):
+        dataset_idx = index % len(self.datasets)
+        inner_idx = index // len(self.datasets)
+        return self.datasets[dataset_idx][inner_idx % len(self.datasets[dataset_idx])]
 
     def __len__(self):
-        return len(self.loaders) * self.max_batches
+        return len(self.datasets) * self.max_len
+

@@ -339,6 +339,9 @@ class CircuitSimulator(object):
     def resetFullTransistorState(self):
         self.calculator.resetFullTransistorState()
 
+    def intervenTransistor(self, transistorIndex, state):
+        self.calculator.intervenTransistor(transistorIndex, state)
+
     def loadCircuit (self, filePath):
 
         if not os.path.exists(filePath):
@@ -684,6 +687,7 @@ cdef class WireCalculator:
 
         self._latestHalfClkCount = 0
 
+
     cdef _prepForRecalc(self):
         self.recalcOrderStack.clear() #  = []
         self.newRecalcOrderStack.clear() #  = []
@@ -708,9 +712,10 @@ cdef class WireCalculator:
         # iterations.  If it doesn't converge by then, raise an 
         # exception.
         cdef int step = 0
-        cdef int stepLimit = 400
+        cdef int stepLimit = 50
         cdef int a, b
         cdef int i, s
+
 
 
         self._latestHalfClkCount = halfClkCount
@@ -726,13 +731,12 @@ cdef class WireCalculator:
                 self.newRecalcArray[wireIndex] = 0
                 self._doWireRecalc(wireIndex)
 
-                # experimental highest resolution recording of transistor states
-                if self._recordHRState:
-                    self._recordTransistorState()
-
                 self.recalcArray[wireIndex] = False
                 self.numWiresRecalculated += 1
 
+            # experimental highest resolution recording of transistor states
+            if self._recordHRState:
+                self._recordTransistorState()
 
             for i in range(self.recalcCap):
                 a = self.recalcArray[i]
@@ -749,6 +753,10 @@ cdef class WireCalculator:
         # may not converge, but it's enough to settle the chip into
         # a reasonable state so that when input and clock pulses are
         # applied, the simulation will converge.
+
+        # (for causal analysis) not converge means the state of the
+        # chip has been changed, since the regular state converges
+        # so catch the error and return full length state
         if step >= stepLimit:
             msg = 'ERROR: Sim  did not converge after %d iterations'% \
                   ( stepLimit)
@@ -1037,3 +1045,20 @@ cdef class WireCalculator:
         if lesion is not None:
             self._lesion_type = lesionstr2int[str(lesion)] # 0 - No lesion, 1 - Low lesion, 2 - High lesion
             self._tidx_lesion = tidx_lesion
+
+
+    def intervenTransistor(self, int transistor_idx, int state):
+        if state == 1:  # Turn the transistor on
+            # self._turnTransistorOn(transistor_idx)
+            self._transistorState[transistor_idx] = NMOS_GATE_HIGH
+        elif state == 0:  # Turn the transistor off
+            # self._turnTransistorOff(transistor_idx)
+            self._transistorState[transistor_idx] = NMOS_GATE_LOW
+
+        self._lesion_type = state + 1
+        self._tidx_lesion = transistor_idx
+
+        c1Wire = self._transistorWires[transistor_idx, TW_S1]
+        c2Wire = self._transistorWires[transistor_idx, TW_S2]
+        self._doWireRecalc(c1Wire)
+        self._doWireRecalc(c2Wire)

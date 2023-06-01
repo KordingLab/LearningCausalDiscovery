@@ -1,3 +1,3 @@
-from .loading import cycle, MaxCycleLoader
+from .loading import cycle, CombinedCycleDataset
 
-__all__ = ["MaxCycleLoader"]
+__all__ = ["CombinedCycleDataset"]
